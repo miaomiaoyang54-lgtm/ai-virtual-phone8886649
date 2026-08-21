@@ -36,6 +36,7 @@ import {
     getMixMaterial,
     isMixBuiltinId,
     listMixPickables,
+    MIX_CABINET_UPDATED_EVENT,
     loadMixCabinet,
     loadMixProfile,
     loadMixRecipes,
@@ -71,6 +72,7 @@ import { fetchCurrentAccount } from "@/lib/account-client";
 import { MixHallGoneError, shareHallMaterial, shareHallRecipe, updateHallMaterial, updateHallRecipe } from "@/lib/mixology/hall-client";
 import { exportMixMaterial, exportMixMaterialPng, parseMixMaterialsFromJson, parseMixMaterialsFromPng } from "@/lib/mixology/transfer";
 import { MixMaterialEditor } from "./mixology-editor";
+import { MixMatAutoCover, mixMatHasAutoCover } from "./mixology-preview";
 import { MixologyGame } from "./mixology-game";
 import { CommentThread, MixologyHall } from "./mixology-hall";
 import { AuthorAvatar, KindGlyph, MatCard, MaterialDetail, MixConfirm, MixTagList, SealedNote, formatMixTime } from "./mixology-shared";
@@ -171,6 +173,14 @@ export function MixologyApp({ onClose }: { onClose: () => void }) {
         setRecipes(loadMixRecipes());
         setSessions(loadMixSessions());
     }, []);
+
+    // 小卷工具直写酒柜/配方后广播这个事件——不监听的话，App 开着时
+    // 助手替用户建好的材料要等下一次自发操作才会出现在列表里
+    useEffect(() => {
+        const onExternalUpdate = () => refresh();
+        window.addEventListener(MIX_CABINET_UPDATED_EVENT, onExternalUpdate);
+        return () => window.removeEventListener(MIX_CABINET_UPDATED_EVENT, onExternalUpdate);
+    }, [refresh]);
 
     /**
      * 从酒材页/大厅点「编辑」进来：那边已经把自己的作品取回本地了，
@@ -635,7 +645,7 @@ export function MixologyApp({ onClose }: { onClose: () => void }) {
                                         <div className="mix-slot-body">
                                             {chosen ? (
                                                 <>
-                                                    {chosen.cover ? (
+                                                    {chosen.kind === "character" && chosen.cover ? (
                                                         // eslint-disable-next-line @next/next/no-img-element
                                                         <img className="mix-slot-cover" src={chosen.cover} alt={chosen.name} />
                                                     ) : (
@@ -766,7 +776,8 @@ export function MixologyApp({ onClose }: { onClose: () => void }) {
                                         name={material.name}
                                         hook={material.hook}
                                         tags={material.tags}
-                                        cover={material.cover}
+                                        cover={material.kind === "character" ? material.cover : undefined}
+                                        preview={mixMatHasAutoCover(material) ? <MixMatAutoCover material={material} /> : undefined}
                                         badge={isMixBuiltinId(material.id)
                                             ? "官方"
                                             : material.imported || mixCloudState(material) === "local"
@@ -991,10 +1002,6 @@ export function MixologyApp({ onClose }: { onClose: () => void }) {
                                     </>
                                 )}
                             </div>
-                            {detail.cover && detail.kind !== "character" ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={detail.cover} alt={detail.name} style={{ width: 96, height: 128, objectFit: "cover", borderRadius: 12, margin: "4px 0 12px" }} />
-                            ) : null}
                             <MixTagList tags={detail.tags} />
                             {/* 与酒材页同一套展示：角色卡点开看门面（画布/一句话介绍），设定正文进「编辑」看 */}
                             {detail.kind === "character" ? (
@@ -1190,7 +1197,8 @@ export function MixologyApp({ onClose }: { onClose: () => void }) {
                                             name={material.name}
                                             hook={material.hook}
                                             tags={material.tags}
-                                            cover={material.cover}
+                                            cover={material.kind === "character" ? material.cover : undefined}
+                                            preview={mixMatHasAutoCover(material) ? <MixMatAutoCover material={material} /> : undefined}
                                             badge={isMixBuiltinId(material.id) ? "官方" : undefined}
                                             onClick={() => {
                                                 setBarSlots((prev) => {
